@@ -12,7 +12,6 @@ from locations.items import Feature
 class BankHapoalimILSpider(Spider):
     name = "bank_hapoalim_il"
     item_attributes = {"brand": "בנק הפועלים", "brand_wikidata": "Q2666775"}
-    requires_proxy = True  # Incapsula blocks direct requests.
 
     async def start(self) -> AsyncIterator[Any]:
         yield JsonRequest(url="https://www.bankhapoalim.co.il/he/api/branches/data")
