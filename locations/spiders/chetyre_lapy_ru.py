@@ -14,7 +14,6 @@ class ChetyreLapyRUSpider(scrapy.Spider):
     start_urls = ["https://4lapy.ru/shops/"]
     item_attributes = {"brand_wikidata": "Q62390783"}
     custom_settings = {"ROBOTSTXT_OBEY": False}
-    requires_proxy = "RU"
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
         next_data = json.loads(response.xpath('//script[@id="__NEXT_DATA__"]/text()').get())
