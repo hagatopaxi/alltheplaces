@@ -14,7 +14,6 @@ class MichaelsSpider(SitemapSpider):
     sitemap_urls = ["https://locations.michaels.com/sitemap.xml.gz", "https://locationsca.michaels.com/sitemap.xml.gz"]
 
     sitemap_rules = [(r"https://\w+\.michaels\.com/[^/]+/[^/]+/\d+/$", "parse")]
-    requires_proxy = True
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
         raw_data = json.loads(response.xpath('//*[@id="__NEXT_DATA__" ]/text()').get())["props"]["pageProps"][
