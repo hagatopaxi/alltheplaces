@@ -13,7 +13,6 @@ class BursonAutoPartsAUSpider(Spider):
     item_attributes = {"brand": "Burson Auto Parts", "brand_wikidata": "Q117075930"}
     allowed_domains = ["www.burson.com.au"]
     start_urls = ["https://www.burson.com.au/find-a-store"]
-    requires_proxy = True  # Imperva
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
         raw_js = (
