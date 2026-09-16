@@ -13,7 +13,6 @@ class RymanGBSpider(JSONBlobSpider):
     item_attributes = {"brand": "Ryman", "brand_wikidata": "Q7385188"}
     start_urls = ["https://www.ryman.co.uk/storefinder/"]
     custom_settings = {"DEFAULT_REQUEST_HEADERS": {"Host": "www.ryman.co.uk"}, "ROBOTSTXT_OBEY": False}
-    requires_proxy = True
     drop_attributes = {"facebook", "twitter"}
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
