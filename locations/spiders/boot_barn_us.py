@@ -13,7 +13,6 @@ class BootBarnUSSpider(SitemapSpider):
     allowed_domains = ["www.bootbarn.com"]
     sitemap_urls = ["https://www.bootbarn.com/sitemap-store-sitemap.xml"]
     custom_settings = {"ROBOTSTXT_OBEY": False, "DOWNLOAD_DELAY": 3, "CONCURRENT_REQUESTS": 1}
-    requires_proxy = True
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
         item = Feature()
