@@ -1,97 +1,100 @@
 from typing import Any, AsyncIterator, Iterable
+from urllib.parse import urlencode
 
-from scrapy import Request, Spider
-from scrapy.http import Response
+from scrapy import Request
+from scrapy.http import JsonRequest, TextResponse
 
 from locations.categories import Categories, apply_category
+from locations.geo import country_iseadgg_centroids
 from locations.items import Feature
-from locations.licenses import Licenses
-
-# https://www.data.gouv.fr/datasets/liste-des-bureaux-de-poste-agences-postales-et-relais-poste
-DATASET_URL = "https://data.laposte.fr/data-fair/api/v1/datasets/laposte-poincont2/lines"
-PAGE_SIZE = 10000
+from locations.storefinders.yext_search import YextSearchSpider
 
 LA_POSTE = {"operator": "La Poste", "operator_wikidata": "Q373724"}
 
 # Sites operated by La Poste or by a local authority on its behalf are post
 # offices in their own right.
 POST_OFFICES = {
-    "Bureau de Poste",
-    "Agence postale",
-    "Agence postale communale",
-    "Agence postale intercommunale",
+    "La Poste",
+    "La Poste Agence Communale",
+    "La Poste Agence Intercommunale",
 }
 
 # Shops (bakers, tobacconists, …) hosting a postal counter. Their own trade is
 # not published, so they get amenity=yes like other post partners in ATP.
 POST_PARTNERS = {
-    "Agence postale ou Relais poste",
-    "Point partenaire",
-    "Relais poste",
+    "La Poste Relais",
+    "La Poste Point partenaire",
 }
 
-COUNTRIES = {"FRANCE": "FR", "ANDORRE": "AD"}
 
-
-class LaPosteFRSpider(Spider):
+class LaPosteFRSpider(YextSearchSpider):
     name = "la_poste_fr"
-    allowed_domains = ["data.laposte.fr"]
-    # The portal's robots.txt is the stock data-fair template (identical to its
-    # vendor's own opendata.koumoul.com) and blocks JSON endpoints from being
-    # indexed. La Poste's terms of service list the API as a delivery channel
-    # for the data, and data.gouv.fr publishes this URL as the dataset's file.
-    custom_settings = {"ROBOTSTXT_OBEY": False}
-    dataset_attributes = Licenses.ETALAB2.value | {
-        "source": "api",
-        "attribution:name": "La Poste",
-        "attribution:website": "https://data.laposte.fr/datasets/laposte-poincont2",
-    }
+    host = "https://localiser.laposte.fr"
+    # The search answers at most 10,000 results per query, fewer than La Poste
+    # has sites: it is run around each 158 km centroid, 100 miles being the
+    # radius it takes. The widest circle, around Paris, holds 3,400 sites.
+    search_radius_miles = 100
+
+    def make_request(self, offset: int, centre: str = "") -> JsonRequest:
+        query = urlencode(
+            {
+                "q": centre,
+                "r": self.search_radius_miles,
+                "per": self.page_size,
+                "offset": offset,
+                # Post offices and postal counters: no parcel lockers, pickup
+                # points, letter boxes or business-only sites.
+                "jesuis": "particulier",
+                "contact": "vente",
+            }
+        )
+        return JsonRequest(f"{self.host}/index.html?{query}", headers={"Accept": "application/json"})
 
     async def start(self) -> AsyncIterator[Request]:
-        yield Request(url=f"{DATASET_URL}?size={PAGE_SIZE}")
+        for lat, lon in country_iseadgg_centroids(["FR", "AD"], 158):
+            yield self.make_request(0, f"{lat},{lon}")
 
-    def parse(self, response: Response) -> Iterable[Any]:
-        payload = response.json()
+    def request_next_page(self, response: TextResponse, **kwargs: Any) -> Iterable[JsonRequest]:
+        pager = response.json()["queryParams"]
+        offset = int(pager["offset"][0]) + self.page_size
+        if offset < response.json()["response"]["count"]:
+            yield self.make_request(offset, pager["q"][0])
 
-        for location in payload["results"]:
-            # The dataset is refreshed monthly and its schema could shift, so
-            # skip anything without the fields that make a location usable
-            # rather than losing the rest of the page to a KeyError.
-            if not location.get("identifiant_a"):
-                self.crawler.stats.inc_value("atp/la_poste_fr/no_ref")
-                continue
-            if not location.get("latitude") or not location.get("longitude"):
-                self.crawler.stats.inc_value("atp/la_poste_fr/no_coordinates")
-                continue
+    def parse_item(self, location: dict, item: Feature) -> Iterable[Feature]:
+        profile = location["profile"]
+        if profile.get("closed"):
+            return
+        if not (ref := profile.get("c_codeACORES")):
+            self.crawler.stats.inc_value("atp/la_poste_fr/no_ref")
+            return
 
-            item = Feature()
-            item["ref"] = location["identifiant_a"]
-            item["branch"] = location.get("libelle_du_site")
-            item["street_address"] = location.get("adresse")
-            item["postcode"] = location.get("code_postal")
-            item["city"] = location.get("localite")
-            item["country"] = COUNTRIES.get(location.get("pays"))
-            item["lat"] = location["latitude"]
-            item["lon"] = location["longitude"]
-            # numero_de_telephone is always 3631, La Poste's national number.
+        # The site code of La Poste's open data, which OSM carries too.
+        item["ref"] = item["extras"]["ref:FR:LaPoste"] = ref
+        item["branch"] = profile.get("c_intituléÉtablissement")
+        # La Poste's own position, the one its open data publishes: Yext's
+        # geocoding of the address lands kilometres away on 3% of the sites.
+        if coordinate := profile.get("displayCoordinate"):
+            item["lat"], item["lon"] = coordinate["lat"], coordinate["long"]
+        item.pop("name", None)
+        # 3631 or its 09 70 82 36 31 equivalent, La Poste's national number.
+        item.pop("phone", None)
+        if not item["opening_hours"].as_opening_hours():
+            item.pop("opening_hours")
 
-            item["extras"]["ref:INSEE"] = location.get("code_insee")
+        # An unrecognised type falls through to the partner tagging, which
+        # claims less than amenity=post_office does.
+        site_type = profile.get("c_typeÉtablissement1")
+        if site_type in POST_OFFICES:
+            apply_category(Categories.POST_OFFICE, item)
+            item.update(LA_POSTE)
+        else:
+            if site_type not in POST_PARTNERS:
+                self.logger.error("Unexpected site type: {}".format(site_type))
+            apply_category(Categories.GENERIC_POI, item)
+            item["extras"]["post_office"] = "post_partner"
+            item["extras"]["post_office:brand"] = "La Poste"
+            item["extras"]["post_office:brand:wikidata"] = "Q373724"
+            # The page is La Poste's counter, not the shop's own website.
+            item.pop("website", None)
 
-            # An unrecognised or absent characteristic falls through to the
-            # partner tagging, which claims less than amenity=post_office does.
-            characteristic = location.get("caracteristique_du_site")
-            if characteristic in POST_OFFICES:
-                apply_category(Categories.POST_OFFICE, item)
-                item.update(LA_POSTE)
-            else:
-                if characteristic not in POST_PARTNERS:
-                    self.logger.error("Unexpected characteristic: {}".format(characteristic))
-                apply_category(Categories.GENERIC_POI, item)
-                item["extras"]["post_office"] = "post_partner"
-                item["extras"]["post_office:brand"] = "La Poste"
-                item["extras"]["post_office:brand:wikidata"] = "Q373724"
-
-            yield item
-
-        if next_page := payload.get("next"):
-            yield Request(url=next_page)
+        yield item
