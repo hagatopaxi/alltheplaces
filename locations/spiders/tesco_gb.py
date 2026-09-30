@@ -44,7 +44,6 @@ class TescoGBSpider(SitemapSpider, StructuredDataSpider, PlaywrightSpider):
         "USER_AGENT": BROWSER_DEFAULT,
         "ROBOTSTXT_OBEY": False,
     }
-    requires_proxy = True
     strip_names = [
         "Tesco Café",
         "Tesco Petrol Filling Station",
