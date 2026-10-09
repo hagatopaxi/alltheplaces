@@ -20,7 +20,6 @@ class HamleysSpider(CrawlSpider):
     item_attributes = HAMLEYS_SHARED_ATTRIBUTES
     rules = [Rule(LinkExtractor(allow="/stores/"), callback="parse")]
     custom_settings = {"ROBOTSTXT_OBEY": False}
-    requires_proxy = True
 
     def parse(self, response):
         if location_js := response.xpath("//div/@data-locations").get():
