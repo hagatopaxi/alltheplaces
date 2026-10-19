@@ -12,7 +12,6 @@ class Hb1PharmacyPHSpider(Spider):
     item_attributes = {"brand_wikidata": "Q120350751"}
     start_urls = ["https://nccc.com.ph/business-unit/hb1-pharmacy/"]
     no_refs = True
-    requires_proxy = True
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
         for location in response.xpath('//ul[@class="contact"]/parent::div/parent::div'):
