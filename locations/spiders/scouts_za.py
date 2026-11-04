@@ -15,7 +15,6 @@ class ScoutsZASpider(JSONBlobSpider):
     }
     start_urls = ["https://www.scouts.org.za/scouts-near-you/"]
     allowed_domains = ["scouts.org.za"]
-    requires_proxy = True
 
     async def start(self):
         for url in self.start_urls:
