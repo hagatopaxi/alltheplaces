@@ -18,7 +18,6 @@ class RepcoSpider(Spider):
         "https://www.repco.com.au/en/store-finder/store-locator?q=&page=0",
         "https://www.repco.co.nz/en/store-finder/store-locator?q=&page=0",
     ]
-    requires_proxy = "AU"  # or NZ
 
     async def start(self) -> AsyncIterator[JsonRequest]:
         for url in self.start_urls:
