@@ -25,7 +25,6 @@ class VonMaurUSSpider(Spider):
     allowed_domains = ["www.vonmaur.com"]
     start_urls = ["https://www.vonmaur.com/Stores.aspx"]
     # The store locator returns "Access Denied" outside the US (see GitHub issue #804).
-    requires_proxy = True
     # robots.txt disallows all crawling except for a handful of named search engine bots.
     # The site is also slow to respond, so allow more time than the default timeout.
     custom_settings = {"ROBOTSTXT_OBEY": False, "DOWNLOAD_TIMEOUT": 90}
